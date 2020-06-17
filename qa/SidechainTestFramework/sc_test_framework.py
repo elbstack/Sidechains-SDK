@@ -1,226 +1,690 @@
-#!/usr/bin/env python2
-from netrc import netrc
-
-from SidechainTestFramework.sc_boostrap_info import SCNetworkConfiguration, SCBootstrapInfo
-from test_framework.test_framework import BitcoinTestFramework
-from test_framework.authproxy import JSONRPCException
-from SidechainTestFramework.sidechainauthproxy import SCAPIException
-from test_framework.util import check_json_precision, \
-    initialize_chain_clean, \
-    start_nodes, stop_nodes, \
-    sync_blocks, sync_mempools, wait_bitcoinds, websocket_port_by_mc_node_index
-from SidechainTestFramework.scutil import initialize_default_sc_chain_clean, \
-    start_sc_nodes, stop_sc_nodes, \
-    sync_sc_blocks, sync_sc_mempools, TimeoutException, \
-    bootstrap_sidechain_nodes
 import os
-import traceback
 import sys
-import shutil
-from SidechainTestFramework.sc_boostrap_info import SCNodeConfiguration, SCCreationInfo, MCConnectionInfo, \
-    SCNetworkConfiguration
 
-'''
-The workflow is the following:
-1- add_options      (for MC nodes)
-2- sc_add_options   (for SC nodes)
-3- setup_chain      (for MC nodes)
-4- setup_network    (for MC nodes)
-5- sc_setup_chain   (for SC nodes)
-6- sc_setup_network (for SC nodes)
+import json
 
-Override the proper methods if you want to change default behavior.
+from SidechainTestFramework.sc_boostrap_info import MCConnectionInfo, SCBootstrapInfo, SCNetworkConfiguration, Account, \
+    VrfAccount, WithdrawalCertificateData
+from sidechainauthproxy import SidechainAuthServiceProxy
+import subprocess
+import time
+import socket
+from contextlib import closing
 
-Default behavior: the framework starts 1 SC node connected to 1 MC node.
-            *************          *************
-            * SC Node 1 *  <---->  * MC Node 1 *
-            *************          *************
+from test_framework.util import initialize_new_sidechain_in_mainchain
 
-'''
-class SidechainTestFramework(BitcoinTestFramework):
+WAIT_CONST = 1
 
-    def add_options(self, parser):
-        pass
 
-    def setup_chain(self):
-        initialize_chain_clean(self.options.tmpdir, 1)
+class TimeoutException(Exception):
+    def __init__(self, operation):
+        Exception.__init__(self)
+        self.operation = operation
 
-    def setup_network(self, split = False):
-        self.nodes = self.setup_nodes()
-        self.sync_all()
 
-    def setup_nodes(self):
-        return start_nodes(1, self.options.tmpdir)
+def sc_p2p_port(n):
+    return 8300 + n + os.getpid() % 999
 
-    def split_network(self):
-        pass
 
-    def sync_all(self):
-        sync_blocks(self.nodes)
-        sync_mempools(self.nodes)
+def sc_rpc_port(n):
+    return 8200 + n + os.getpid() % 999
 
-    def sync_nodes(self, mc_nodes):
-        sync_blocks(mc_nodes)
-        sync_mempools(mc_nodes)
 
-    def join_network(self):
-        pass
+# To be removed
+def wait_for_next_sc_blocks(node, expected_height, wait_for=25):
+    """
+    Wait until blockchain height won't reach the expected_height, for wait_for seconds
+    """
+    start = time.time()
+    while True:
+        if time.time() - start >= wait_for:
+            raise TimeoutException("Waiting blocks")
+        height = int(node.block_best()["result"]["height"])
+        if height >= expected_height:
+            break
+        time.sleep(WAIT_CONST)
 
-    def sc_add_options(self, parser):
-        pass
 
-    def sc_setup_chain(self):
-        mc_node_1 = self.nodes[0]
-        sc_node_1_configuration = SCNodeConfiguration(
-            MCConnectionInfo(address="ws://{0}:{1}".format(mc_node_1.hostname, websocket_port_by_mc_node_index(0)))
-        )
-        network = SCNetworkConfiguration(SCCreationInfo(mc_node_1, 600, 1000), sc_node_1_configuration)
-        self.sc_nodes_bootstrap_info = bootstrap_sidechain_nodes(self.options.tmpdir, network)
+def wait_for_sc_node_initialization(nodes):
+    """
+    Wait for SC Nodes to be fully initialized. This is done by pinging a node until its socket will be fully open
+    """
+    for i in range(len(nodes)):
+        rpc_port = sc_rpc_port(i)
+        with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
+            while not sock.connect_ex(("127.0.0.1", rpc_port)) == 0:
+                time.sleep(WAIT_CONST)
 
-    def sc_setup_network(self, split = False):
-        self.sc_nodes = self.sc_setup_nodes()
-        self.sc_sync_all()
 
-    def sc_setup_nodes(self):
-        return start_sc_nodes(1, self.options.tmpdir)
+def sync_sc_blocks(api_connections, wait_for=25, p=False):
+    """
+    Wait for maximum wait_for seconds for everybody to have the same block count
+    """
+    start = time.time()
+    while True:
+        if time.time() - start >= wait_for:
+            raise TimeoutException("Syncing blocks")
+        counts = [int(x.block_best()["result"]["height"]) for x in api_connections]
+        if p:
+            print (counts)
+        if counts == [counts[0]] * len(counts):
+            break
+        time.sleep(WAIT_CONST)
 
-    def sc_split_network(self):
-        pass
 
-    def sc_sync_all(self):
-        sync_sc_blocks(self.sc_nodes)
-        sync_sc_mempools(self.sc_nodes)
+def sync_sc_mempools(api_connections, wait_for=25):
+    """
+    Wait for maximum wait_for seconds for everybody to have the same transactions in their memory pools
+    """
+    start = time.time()
+    while True:
+        refpool = api_connections[0].transaction_allTransactions()["result"]["transactions"]
+        if time.time() - start >= wait_for:
+            raise TimeoutException("Syncing mempools")
+        num_match = 1
+        for i in range(1, len(api_connections)):
+            nodepool = api_connections[i].transaction_allTransactions()["result"]["transactions"]
+            if cmp(nodepool, refpool) == 0:
+                num_match = num_match + 1
+        if num_match == len(api_connections):
+            break
+        time.sleep(WAIT_CONST)
 
-    def sc_sync_nodes(self, sc_nodes):
-        sync_sc_blocks(sc_nodes)
-        sync_sc_mempools(sc_nodes)
 
-    def sc_join_network(self):
-        pass
+sidechainclient_processes = {}
 
-    def run_test(self):
-        pass
 
-    def main(self):
-        import optparse
 
-        parser = optparse.OptionParser(usage="%prog [options]")
-        parser.add_option("--nocleanup", dest="nocleanup", default=False, action="store_true",
-                          help="Leave bitcoinds and test.* datadir on exit or error")
-        parser.add_option("--noshutdown", dest="noshutdown", default=False, action="store_true",
-                          help="Don't stop bitcoinds after the test execution")
-        parser.add_option("--zendir", dest="zendir", default="ZenCore/src",
-                          help="Source directory containing zend/zen-cli (default: %default)")
-        parser.add_option("--scjarpath", dest="scjarpath", default="../examples/simpleapp/target/sidechains-sdk-simpleapp-0.2.6.jar;../examples/simpleapp/target/lib/* com.horizen.examples.SimpleApp", #New option. Main class path won't be needed in future
-                          help="Directory containing .jar file for SC (default: %default)")
-        parser.add_option("--tmpdir", dest="tmpdir", default="../examples/simpleapp/target/tmp",
-                          help="Root directory for datadirs")
-        parser.add_option("--tracerpc", dest="trace_rpc", default=False, action="store_true",
-                          help="Print out all RPC calls as they are made")
+def launch_bootstrap_tool(command_name, json_parameters):
+    json_param = json.dumps(json_parameters)
+    java_ps = subprocess.Popen(["java", "-jar",
+                               "../tools/sctool/target/sidechains-sdk-scbootstrappingtools-0.2.6.jar",
+                               command_name, json_param], stdout=subprocess.PIPE)
+    sc_bootstrap_output = java_ps.communicate()[0]
+    jsone_node = json.loads(sc_bootstrap_output)
+    return jsone_node
 
-        self.add_options(parser)
-        self.sc_add_options(parser)
-        (self.options, self.args) = parser.parse_args()
+"""
+Generate a genesis info by calling ScBootstrappingTools with command "genesisinfo"
+Parameters:
+ - n: sidechain node nth
+ - genesis_info: genesis info provided by a mainchain node
+ - genesis_secret:
+ 
+Output: a JSON object to be included in the settings file of the sidechain node nth.
+{
+    "scId": "id of the sidechain node",
+    "scGenesisBlockHex": "some value",
+    "powData": "some value",
+    "mcBlockHeight": xxx,
+    "mcNetwork": regtest|testnet|mainnet
+    "withdrawalEpochLength": xxx
+}
+"""
+def generate_genesis_data(genesis_info, genesis_secret, vrf_secret):
+    jsonParameters = {"secret": genesis_secret, "vrfSecret": vrf_secret, "info": genesis_info}
+    jsonNode = launch_bootstrap_tool("genesisinfo", jsonParameters)
+    return jsonNode
 
-        if self.options.trace_rpc:
-            import logging
-            logging.basicConfig(level=logging.DEBUG)
 
-        os.environ['PATH'] = self.options.zendir+":"+os.environ['PATH']
+"""
+Generate secrets by calling ScBootstrappingTools with command "generatekey"
+Parameters:
+ - seed
+ - number_of_accounts: the number of keys to be generated
+ 
+Output: an array of instances of Account (see sc_bootstrap_info.py).
+"""
+def generate_secrets(seed, number_of_accounts):
+    accounts = []
+    secrets = []
+    for i in range(number_of_accounts):
+        jsonParameters = {"seed": "{0}_{1}".format(seed, i + 1)}
+        secrets.append(launch_bootstrap_tool("generatekey", jsonParameters))
 
-        check_json_precision()
+    for i in range(len(secrets)):
+        secret = secrets[i]
+        accounts.append(Account(secret["secret"], secret["publicKey"]))
+    return accounts
 
-        success = False
-        try:
-            if not os.path.isdir(self.options.tmpdir):
-                os.makedirs(self.options.tmpdir)
 
-            print("Initializing test directory "+self.options.tmpdir)
+"""
+Generate Vrf keys by calling ScBootstrappingTools with command "generateVrfKey"
+Parameters:
+ - seed
+ - number_of_accounts: the number of keys to be generated
 
-            self.setup_chain()
+Output: an array of instances of VrfKey (see sc_bootstrap_info.py).
+"""
 
-            self.setup_network()
+def generate_vrf_secrets(seed, number_of_vrf_keys):
+    vrf_keys = []
+    secrets = []
+    for i in range(number_of_vrf_keys):
+        jsonParameters = {"seed": "{0}_{1}".format(seed, i + 1)}
+        secrets.append(launch_bootstrap_tool("generateVrfKey", jsonParameters))
 
-            self.sc_setup_chain()
+    for i in range(len(secrets)):
+        secret = secrets[i]
+        vrf_keys.append(VrfAccount(secret["vrfSecret"], secret["vrfPublicKey"]))
+    return vrf_keys
 
-            self.sc_setup_network()
+# Maybe should we give the possibility to customize the configuration file by adding more fields ?
 
-            self.run_test()
+"""
+Generate withdrawal certificate data calling ScBootstrappingTools with command "generateProofInfo"
+Parameters:
+ - seed
+ - number_of_accounts: the number of schnorr keys to be generated
 
-            success = True
+Output: WithdrawalCertificateData (see sc_bootstrap_info.py).
+"""
+def generate_withdrawal_certificate_data(seed, number_of_schnorr_keys, threshold):
+    jsonParameters = {"seed": seed, "keyCount": number_of_schnorr_keys, "threshold": threshold}
+    output = launch_bootstrap_tool("generateProofInfo", jsonParameters)
 
-        except JSONRPCException as e:
-            print("JSONRPC error: "+e.error['message'])
-            traceback.print_tb(sys.exc_info()[2])
-        except SCAPIException as e: #New exception for SC API
-            print("SCAPI error: "+e.error)
-            traceback.print_tb(sys.exc_info()[2])
-        except TimeoutException as e:
-            print("Timeout while: " + e.operation) #Timeout for SC Operations
-            traceback.print_tb(sys.exc_info()[2])
-        except AssertionError as e:
-            print("Assertion failed: "+e.message)
-            traceback.print_tb(sys.exc_info()[2])
-        except Exception as e:
-            print("Unexpected exception caught during testing: "+str(e))
-            traceback.print_tb(sys.exc_info()[2])
+    threshold = output["threshold"]
+    verification_key = output["verificationKey"]
+    gen_sys_constant = output["genSysConstant"]
+    schnorr_keys = output["schnorrKeys"]
 
-        if not self.options.noshutdown: #Support for tests with MC only, SC only, MC/SC
-            if hasattr(self,"sc_nodes"):
-                print("Stopping SC nodes")
-                stop_sc_nodes(self.sc_nodes)
-            if hasattr(self, "nodes"):
-                print("Stopping MC nodes")
-                stop_nodes(self.nodes)
-                wait_bitcoinds()
+    schnorr_secrets = []
+    schnorr_public_keys = []
+    for i in range(len(schnorr_keys)):
+        keys = schnorr_keys[i]
+        schnorr_secrets.append(keys["schnorrSecret"])
+        schnorr_public_keys.append(keys["schnorrPublicKey"])
+
+
+    withdrawal_certificate_data = WithdrawalCertificateData(threshold, gen_sys_constant, verification_key, schnorr_secrets, schnorr_public_keys)
+    return withdrawal_certificate_data
+
+"""
+Create directories for each node and configuration files inside them.
+For each node put also genesis data in configuration files.
+
+Parameters:
+ - dirname: directory name
+ - n: sidechain node nth
+ - bootstrap_info: an instance of SCBootstrapInfo (see sc_bootstrap_info.py)
+ - websocket_config: an instance of MCConnectionInfo (see sc_boostrap_info.py)
+"""
+def initialize_sc_datadir(dirname, n, bootstrap_info=SCBootstrapInfo, websocket_config=MCConnectionInfo()):
+
+    apiAddress = "127.0.0.1"
+    configsData = []
+    apiPort = sc_rpc_port(n)
+    bindPort = sc_p2p_port(n)
+    datadir = os.path.join(dirname, "sc_node" + str(n))
+    mc0datadir = os.path.join(dirname, "node0")
+    if not os.path.isdir(datadir):
+        os.makedirs(datadir)
+
+    with open('./resources/template.conf', 'r') as templateFile:
+        tmpConfig = templateFile.read()
+
+    genesis_secrets = []
+    if bootstrap_info.genesis_vrf_account is not None:
+        genesis_secrets.append(bootstrap_info.genesis_vrf_account.secret)
+
+    if bootstrap_info.genesis_account is not None:
+        genesis_secrets.append(bootstrap_info.genesis_account.secret)
+
+    zencliArgs = []
+    zencliArgs.append("-datadir=" + mc0datadir.replace("\\", "/"))
+    config = tmpConfig % {
+        'NODE_NUMBER': n,
+        'DIRECTORY': dirname,
+        'WALLET_SEED': "sidechain_seed_{0}".format(n),
+        'API_ADDRESS': "127.0.0.1",
+        'API_PORT': str(apiPort),
+        'BIND_PORT': str(bindPort),
+        'OFFLINE_GENERATION': "false",
+        'GENESIS_SECRETS': json.dumps(genesis_secrets),
+        'SIDECHAIN_ID': bootstrap_info.sidechain_id,
+        'GENESIS_DATA': bootstrap_info.sidechain_genesis_block_hex,
+        'POW_DATA': bootstrap_info.pow_data,
+        'BLOCK_HEIGHT': bootstrap_info.mainchain_block_height,
+        'NETWORK': bootstrap_info.network,
+        'WITHDRAWAL_EPOCH_LENGTH': bootstrap_info.withdrawal_epoch_length,
+        'WEBSOCKET_ADDRESS': websocket_config.address,
+        'CONNECTION_TIMEOUT': websocket_config.connectionTimeout,
+        'RECONNECTION_DELAY': websocket_config.reconnectionDelay,
+        'RECONNECTION_MAX_ATTEMPS': websocket_config.reconnectionMaxAttempts,
+        "ZEN_CLI": str(os.getenv("BITCOINCLI", "bitcoin-cli")).replace("\\","/"), # NOTE: it always will call first MC node RPC. TODO: make it configurable.
+        "ZEN_CLI_ARGS": json.dumps(zencliArgs),
+        "THRESHOLD" : bootstrap_info.withdrawal_certificate_data.threshold,
+        "SIGNER_PUBLIC_KEY": json.dumps(bootstrap_info.withdrawal_certificate_data.schnorr_public_keys),
+        "SIGNER_PRIVATE_KEY": json.dumps(bootstrap_info.withdrawal_certificate_data.schnorr_secrets)
+    }
+
+    configsData.append({
+        "name": "node" + str(n),
+        "url": "http://" + apiAddress + ":" + str(apiPort)
+    })
+    with open(os.path.join(datadir, "node" + str(n) + ".conf"), 'w+') as configFile:
+        configFile.write(config)
+
+    return configsData
+
+"""
+Create directories for each node and default configuration files inside them.
+For each node put also genesis data in configuration files.
+"""
+def initialize_default_sc_datadir(dirname, n):
+
+    genesis_secrets = {
+        0: "6882a61d8a23a9582c7c7e659466524880953fa25d983f29a8e3aa745ee6de5c0c97174767fd137f1cf2e37f2e48198a11a3de60c4a060211040d7159b769266", \
+        1: "905e2e581615ba0eff2bcd9fb666b4f6f6ed99ddd05208ae7918a25dc6ea6179c958724e7f4c44fd196d27f3384d2992a9c42485888862a20dcec670f3c08a4e", \
+        2: "80b9a06608fa5dbd11fb72d28b9df49f6ac69f0e951ca1d9e67abd404559606be9b36fb5ae7e74cc50603b161a5c31d26035f6a59e602294d9900740d6c4007f"}
+
+    apiAddress = "127.0.0.1"
+    configsData = []
+    apiPort = sc_rpc_port(n)
+    bindPort = sc_p2p_port(n)
+    datadir = os.path.join(dirname, "sc_node" + str(n))
+    if not os.path.isdir(datadir):
+        os.makedirs(datadir)
+
+    with open('./resources/template_predefined_genesis.conf', 'r') as templateFile:
+        tmpConfig = templateFile.read()
+    config = tmpConfig % {
+        'NODE_NUMBER': n,
+        'DIRECTORY': dirname,
+        'WALLET_SEED': "sidechain_seed_{0}".format(n),
+        'API_ADDRESS': "127.0.0.1",
+        'API_PORT': str(apiPort),
+        'BIND_PORT': str(bindPort),
+        'OFFLINE_GENERATION': "false",
+        'GENESIS_SECRETS': genesis_secrets[n]
+    }
+
+    configsData.append({
+        "name": "node" + str(n),
+        "url": "http://" + apiAddress + ":" + str(apiPort)
+    })
+    with open(os.path.join(datadir, "node" + str(n) + ".conf"), 'w+') as configFile:
+        configFile.write(config)
+
+    return configsData
+
+
+def initialize_default_sc_chain_clean(test_dir, num_nodes):
+    """
+    Create an empty blockchain and num_nodes wallets.
+    Useful if a test case wants complete control over initialization.
+    """
+    for i in range(num_nodes):
+        initialize_default_sc_datadir(test_dir, i)
+
+
+def initialize_sc_chain_clean(test_dir, num_nodes, genesis_secrets, genesis_info, array_of_MCConnectionInfo=[]):
+    """
+    Create an empty blockchain and num_nodes wallets.
+    Useful if a test case wants complete control over initialization.
+    """
+    for i in range(num_nodes):
+        initialize_sc_datadir(test_dir, i, genesis_secrets[i], genesis_info[i], get_websocket_configuration(i, array_of_MCConnectionInfo))
+
+
+def get_websocket_configuration(index, array_of_MCConnectionInfo):
+    return array_of_MCConnectionInfo[index] if index < len(array_of_MCConnectionInfo) else MCConnectionInfo()
+
+
+def start_sc_node(i, dirname, extra_args=None, rpchost=None, timewait=None, binary=None):
+    """
+    Start a SC node and returns API connection to it
+    """
+    # Will we have  extra args for SC too ?
+    datadir = os.path.join(dirname, "sc_node" + str(i))
+    lib_separator = ":"
+    if sys.platform.startswith('win'):
+        lib_separator = ";"
+
+    if binary is None:
+        binary = "../examples/simpleapp/target/sidechains-sdk-simpleapp-0.2.6.jar" + lib_separator + "../examples/simpleapp/target/lib/* com.horizen.examples.SimpleApp"
+    #        else if platform.system() == 'Linux':
+    bashcmd = 'java -cp ' + binary + " " + (datadir + ('/node%s.conf' % i))
+    sidechainclient_processes[i] = subprocess.Popen(bashcmd.split())
+    url = "http://rt:rt@%s:%d" % ('127.0.0.1' or rpchost, sc_rpc_port(i))
+    proxy = SidechainAuthServiceProxy(url)
+    proxy.url = url  # store URL on proxy for info
+    return proxy
+
+
+def start_sc_nodes(num_nodes, dirname, extra_args=None, rpchost=None, binary=None):
+    """
+    Start multiple SC clients, return connections to them
+    """
+    if extra_args is None: extra_args = [None for i in range(num_nodes)]
+    if binary is None: binary = [None for i in range(num_nodes)]
+    nodes = [start_sc_node(i, dirname, extra_args[i], rpchost, binary=binary[i]) for i in range(num_nodes)]
+    wait_for_sc_node_initialization(nodes)
+    return nodes
+
+
+def check_sc_node(i):
+    '''
+    Check subprocess return code.
+    '''
+    sidechainclient_processes[i].poll()
+    return sidechainclient_processes[i].returncode
+
+
+def stop_sc_node(node, i):
+    # Must be changed with a sort of .stop() API Call
+    sidechainclient_processes[i].kill()
+    del sidechainclient_processes[i]
+
+
+def stop_sc_nodes(nodes):
+    # Must be changed with a sort of .stop() API call
+    global sidechainclient_processes
+    for sc in sidechainclient_processes.values():
+        sc.kill()
+    del nodes[:]
+
+
+def set_sc_node_times(nodes, t):
+    pass
+
+
+def wait_sidechainclients():
+    # Wait for all the processes to cleanly exit
+    for sidechainclient in sidechainclient_processes.values():
+        sidechainclient.wait()
+    sidechainclient_processes.clear()
+
+
+def connect_sc_nodes(from_connection, node_num, wait_for=25):
+    """
+    Connect a SC node, from_connection, to another one, specifying its node_num. 
+    Method will attempt to create the connection for maximum wait_for seconds.
+    """
+    j = {"host": "127.0.0.1", \
+         "port": str(sc_p2p_port(node_num))}
+    ip_port = "\"127.0.0.1:" + str(sc_p2p_port(node_num)) + "\""
+    print("Connecting to " + ip_port)
+    oldnum = len(from_connection.node_connectedPeers()["result"]["peers"])
+    from_connection.node_connect(json.dumps(j))
+    start = time.time()
+    while True:
+        if time.time() - start >= wait_for:
+            raise (TimeoutException("Trying to connect to node{0}".format(node_num)))
+        newnum = len(from_connection.node_connectedPeers()["result"]["peers"])
+        if newnum == (oldnum + 1):
+            break
+        time.sleep(WAIT_CONST)
+
+
+def connect_sc_nodes_bi(nodes, a, b):
+    connect_sc_nodes(nodes[a], b)
+    connect_sc_nodes(nodes[b], a)
+
+
+def connect_to_mc_node(sc_node, mc_node, *kwargs):
+    pass
+
+
+def assert_equal(expected, actual, message=""):
+    if expected != actual:
+        if message:
+            message = "; %s" % message
+        raise AssertionError("(left == right)%s\n  left: <%s>\n right: <%s>" % (message, str(expected), str(actual)))
+
+
+def assert_true(condition, message=""):
+    if not condition:
+        raise AssertionError(message)
+
+
+"""
+Verify if a mainchain block data is equal to mainchain block reference info data.
+
+Parameters:
+ - mc_block_reference_info: the JSON representation of a mainchain block reference info. See com.horizen.node.util.MainchainBlockReferenceInfo
+ - expected_mc_block: the JSON representation of a mainchain block
+"""
+def check_mainchain_block_reference_info(mc_block_reference_info, expected_mc_block):
+    try:
+
+        parent_hash = mc_block_reference_info["blockReferenceInfo"]["parentHash"]
+        hash = mc_block_reference_info["blockReferenceInfo"]["hash"]
+        height = mc_block_reference_info["blockReferenceInfo"]["height"]
+
+        expected_mc_block_hash = expected_mc_block["hash"]
+        expected_mc_block_height = expected_mc_block["height"]
+
+        assert_equal(expected_mc_block_hash, hash)
+        assert_equal(expected_mc_block_height, height)
+
+        expected_mc_block_previousblockhash = expected_mc_block["previousblockhash"]
+
+        assert_equal(expected_mc_block_previousblockhash, parent_hash)
+
+        return True
+    except Exception:
+        return False
+
+"""
+Verify if a mainchain block is included in a sidechain block.
+
+Parameters:
+ - sc_block: the JSON representation of a sidechain block. See com.horizen.block.SidechainBlock
+ - expected_mc_block: the JSON representation of a mainchain block
+"""
+def is_mainchain_block_included_in_sc_block(sc_block, expected_mc_block):
+
+    mc_block_headers_json = sc_block["mainchainHeaders"]
+    is_mac_block_included = False
+
+    for mc_block_header_json in mc_block_headers_json:
+        expected_mc_block_merkleroot = expected_mc_block["merkleroot"]
+
+        sc_mc_block_merkleroot = mc_block_header_json["hashMerkleRoot"]
+
+        if expected_mc_block_merkleroot == sc_mc_block_merkleroot:
+            is_mac_block_included = True
+            break
+
+    return is_mac_block_included
+
+"""
+Verify the wallet balance is equal to an expected balance.
+
+Parameters:
+ - sc_node: a sidechain node
+ - expected_wallet_balance
+"""
+def check_wallet_balance(sc_node, expected_wallet_balance):
+    response = sc_node.wallet_balance()
+    balance = response["result"]
+    assert_equal(expected_wallet_balance * 100000000, int(balance["balance"]), "Unexpected balance")
+
+
+"""
+For a given Account verify the number of related boxes by type and verify the sum of their balances.
+
+Parameters:
+ - sc_node: a sidechain node
+ - account: an instance of Account (see sc_bootstrap_info.py)
+ - expected_boxes_count: the number of expected boxes for that account
+ - expected_balance: expected balance for that account
+"""
+def check_box_balance(sc_node, account, box_type, expected_boxes_count, expected_balance):
+    response = sc_node.wallet_allBoxes()
+    boxes = response["result"]["boxes"]
+    boxes_balance = 0
+    boxes_count = 0
+    pub_key = account.publicKey
+    for box in boxes:
+        if box["proposition"]["publicKey"] == pub_key and (box["typeId"] == box_type or box_type == 0):
+            box_value = box["value"]
+            assert_true(box_value > 0,
+                        "Non positive value for box: {0} with public key: {1}".format(box["id"], pub_key))
+            boxes_balance += box_value
+            boxes_count += 1
+
+    assert_equal(expected_boxes_count, boxes_count,
+                "Unexpected number of boxes for public key {0}. Expected {1} but found {2}."
+                .format(pub_key, expected_boxes_count, boxes_count))
+    assert_equal(expected_balance * 100000000, boxes_balance,
+                "Unexpected sum of balances for public key {0}. Expected {1} but found {2}."
+                .format(pub_key, expected_balance * 100000000, boxes_balance))
+
+"""
+Bootstrap a network of sidechain nodes.
+
+Parameters:
+ - network: an instance of SCNetworkConfiguration (see sc_boostrap_info.py)
+                
+Example: 2 mainchain nodes and 3 sidechain nodes (with default websocket configuration) bootstrapped, respectively, from mainchain node first, first, and third.
+The JSON representation is only for documentation.
+{
+network: {
+    "sc_creation_info":{
+            "mainchain_node": mc_node_1,
+            "sc_id": "id_1"
+            "forward_amout": 200
+            "withdrawal_epoch_length": 1000
+        },
+        [
+            sidechain_1_configuration: {
+                "mc_connection_info":{
+                    "address": "ws://mc_node_1_hostname:mc_node_1_ws_port"
+                    "connectionTimeout": 100
+                    "reconnectionDelay": 1
+                    "reconnectionMaxAttempts": 1
+                }
+            },
+            sidechain_2_configuration: {
+                "mc_connection_info":{
+                    "address": "ws://mc_node_1_hostname:mc_node_1_ws_port"
+                    "connectionTimeout": 100
+                    "reconnectionDelay": 1
+                    "reconnectionMaxAttempts": 1
+                }
+            
+            },
+            sidechain_3_configuration: {
+                "mc_connection_info":{
+                    "address": "ws://mc_node_2_hostname:mc_node_2_ws_port"
+                    "connectionTimeout": 100
+                    "reconnectionDelay": 1
+                    "reconnectionMaxAttempts": 1
+                }
+            }
+        ]
+    }
+}
+ 
+ Output:
+ - bootstrap information of the sidechain nodes. An instance of SCBootstrapInfo (see sc_boostrap_info.py)    
+"""
+def bootstrap_sidechain_nodes(dirname, network=SCNetworkConfiguration):
+    total_number_of_sidechain_nodes = len(network.sc_nodes_configuration)
+    sc_creation_info = network.sc_creation_info
+    sc_nodes_bootstrap_info = create_sidechain(sc_creation_info)
+    sc_nodes_bootstrap_info_empty_account = SCBootstrapInfo(sc_nodes_bootstrap_info.sidechain_id,
+                                                            None,
+                                                            sc_nodes_bootstrap_info.genesis_account_balance,
+                                                            sc_nodes_bootstrap_info.mainchain_block_height,
+                                                            sc_nodes_bootstrap_info.sidechain_genesis_block_hex,
+                                                            sc_nodes_bootstrap_info.pow_data,
+                                                            sc_nodes_bootstrap_info.network,
+                                                            sc_nodes_bootstrap_info.withdrawal_epoch_length,
+                                                            sc_nodes_bootstrap_info.genesis_vrf_account,
+                                                            sc_nodes_bootstrap_info.withdrawal_certificate_data)
+    for i in range(total_number_of_sidechain_nodes):
+        sc_node_conf = network.sc_nodes_configuration[i]
+        if i == 0:
+            bootstrap_sidechain_node(dirname, i, sc_nodes_bootstrap_info, sc_node_conf)
         else:
-            print("Note: client processes were not stopped and may still be running")
+            bootstrap_sidechain_node(dirname, i, sc_nodes_bootstrap_info_empty_account, sc_node_conf)
 
-        if not self.options.nocleanup and not self.options.noshutdown:
-            print("Cleaning up")
-            shutil.rmtree(self.options.tmpdir)
+    return sc_nodes_bootstrap_info
 
-        if success:
-            print("Test successful")
-            sys.exit(0)
-        else:
-            print("Failed")
-            sys.exit(1)
+"""
+Create a sidechain transaction inside a mainchain node.
 
-'''Support for running MC & SC Nodes with different binaries. 
-For MC the implementation follows the one of BTF, for SC it is possible to specify multiple jars'''
-class SidechainComparisonTestFramework(SidechainTestFramework):
+Parameters:
+ - sc_creation_info: an instance of SCCreationInfo (see sc_boostrap_info.py)
+ 
+ Output:
+  - an instance of SCBootstrapInfo (see sc_boostrap_info.py)
+"""
+def create_sidechain(sc_creation_info):
+    accounts = generate_secrets("seed", 1)
+    vrf_keys = generate_vrf_secrets("seed", 1)
+    genesis_account = accounts[0]
+    vrf_key = vrf_keys[0]
+    withdrawal_certificate_data = generate_withdrawal_certificate_data("seed", 7, 5)
+    genesis_info = initialize_new_sidechain_in_mainchain(
+                                    sc_creation_info.mc_node,
+                                    sc_creation_info.withdrawal_epoch_length,
+                                    genesis_account.publicKey,
+                                    sc_creation_info.forward_amount,
+                                    vrf_key.publicKey,
+                                    withdrawal_certificate_data.genSysConstant,
+                                    withdrawal_certificate_data.verificationKey)
 
-    def add_options(self, parser):
-        parser.add_option("--testbinary", dest="testbinary",
-                          default=os.getenv("BITCOIND", "zend"),
-                          help="zend binary to test")
-        parser.add_option("--refbinary", dest="refbinary",
-                          default=os.getenv("BITCOIND", "zend"),
-                          help="zend binary to use for reference nodes (if any)")
+    genesis_data = generate_genesis_data(genesis_info[0], genesis_account.secret, vrf_key.secret)
+    sidechain_id = genesis_info[2]
 
-    def setup_chain(self):
-        self.num_nodes = 2
-        initialize_chain_clean(self.options.tmpdir, self.num_nodes)
+    return SCBootstrapInfo(sidechain_id, genesis_account, sc_creation_info.forward_amount, genesis_info[1],
+                           genesis_data["scGenesisBlockHex"], genesis_data["powData"], genesis_data["mcNetwork"],
+                           sc_creation_info.withdrawal_epoch_length, vrf_key, withdrawal_certificate_data)
 
-    def setup_network(self):
-        self.nodes = start_nodes(self.num_nodes, self.options.tmpdir,
-                                    extra_args=[['-debug', '-whitelist=127.0.0.1']] * self.num_nodes,
-                                    binary=[self.options.testbinary] +
-                                           [self.options.refbinary]*(self.num_nodes-1))
+"""
+Bootstrap one sidechain node: create directory and configuration file for the node.
 
-    def sc_add_options(self, parser):
-        parser.add_option("--jarspathlist", dest="jarspathlist", type = "string",
-                          action = "callback", callback = self._get_args,
-                          default=["resources/twinsChain.jar examples.hybrid.HybridApp", "resources/twinsChainOld.jar examples.hybrid.HybridApp"],
-                          help="node jars to test in the format: \"<jar1>,<jar2>,...\"")
+Parameters:
+ - n: sidechain node nth: used to create directory "sc_node_n"
+ - bootstrap_info: an instance of SCBootstrapInfo (see sc_boostrap_info.py)
+ - sc_node_configuration: an instance of SCNodeConfiguration (see sc_boostrap_info.py)
+ 
+"""
+def bootstrap_sidechain_node(dirname, n, bootstrap_info, sc_node_configuration):
+    initialize_sc_datadir(dirname, n, bootstrap_info, sc_node_configuration.mc_connection_info)
 
-    def _get_args(self, option, opt, value, parser):
-        setattr(parser.values, option.dest, str.split(','))
+def generate_forging_request(epoch, slot):
+    return json.dumps({"epochNumber": epoch, "slotNumber": slot})
 
-    def sc_setup_chain(self):
-        self.num_sc_nodes = len(self.options.jarspathlist)
-        initialize_default_sc_chain_clean(self.options.tmpdir, self.num_sc_nodes)
 
-    def sc_setup_network(self):
-        self.sc_nodes = start_sc_nodes(self.num_sc_nodes, self.options.tmpdir, binary = self.options.jarspathlist)
+def get_next_epoch_slot(epoch, slot, slots_in_epoch):
+    next_slot = slot + 1
+    next_epoch = epoch
+
+    if next_slot > slots_in_epoch:
+        next_slot = 1
+        next_epoch += 1
+    return next_epoch, next_slot
+
+
+def generate_next_block(node, node_name):
+    forging_info = node.block_forgingInfo()["result"]
+    slots_in_epoch = forging_info["consensusSlotsInEpoch"]
+    best_slot = forging_info["bestSlotNumber"]
+    best_epoch = forging_info["bestEpochNumber"]
+
+    next_epoch, next_slot = get_next_epoch_slot(best_epoch, best_slot, slots_in_epoch)
+
+    forge_result = node.block_generate(generate_forging_request(next_epoch, next_slot))
+
+    #"while" will break if whole epoch no generated block, due changed error code
+    while forge_result.has_key("error") and forge_result["error"]["code"] == "0105":
+        print("Skip block generation for {epochNumber} epoch and {slotNumber} slot".format(epochNumber = next_epoch, slotNumber = next_slot))
+        next_epoch, next_slot = get_next_epoch_slot(next_epoch, next_slot, slots_in_epoch)
+        forge_result = node.block_generate(generate_forging_request(next_epoch, next_slot))
+
+    assert_true(forge_result.has_key("result"), "Error during block generation for SC {0}".format(node_name))
+    block_id = forge_result["result"]["blockId"]
+    print("Successfully forged block with id {blockId}".format(blockId = block_id))
+    return forge_result["result"]["blockId"]
+
+
+def generate_next_blocks(node, node_name, blocks_count):
+    blocks_ids = []
+    for i in range(blocks_count):
+        blocks_ids.append(generate_next_block(node, node_name))
+    return blocks_ids

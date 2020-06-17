@@ -2,7 +2,11 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.horizen</groupId>
 	<artifactId>Sidechains</artifactId>
+<<<<<<< HEAD
 	<version>0.2.6</version>
+=======
+	<version>0.2.0-SNAPSHOT</version>
+>>>>>>> 119af6c5... Changed version to 0.2.0-SNAPSHOT, moved VrfFunctionImpl to tests and renamed to DummyVrfFunctionsImpl
 	<inceptionYear>2018</inceptionYear>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

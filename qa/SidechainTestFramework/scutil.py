@@ -98,7 +98,8 @@ sidechainclient_processes = {}
 def launch_bootstrap_tool(command_name, json_parameters):
     json_param = json.dumps(json_parameters)
     java_ps = subprocess.Popen(["java", "-jar",
-                               "../tools/sctool/target/sidechains-sdk-scbootstrappingtools-0.2.6.jar",                               command_name, json_param], stdout=subprocess.PIPE)
+                               "../tools/sctool/target/sidechains-sdk-scbootstrappingtools-0.2.6.jar",
+                               command_name, json_param], stdout=subprocess.PIPE)
     sc_bootstrap_output = java_ps.communicate()[0]
     jsone_node = json.loads(sc_bootstrap_output)
     return jsone_node
@@ -229,6 +230,8 @@ def initialize_sc_datadir(dirname, n, bootstrap_info=SCBootstrapInfo, websocket_
     if bootstrap_info.genesis_account is not None:
         genesis_secrets.append(bootstrap_info.genesis_account.secret)
 
+    zencliArgs = []
+    zencliArgs.append("-datadir=" + mc0datadir.replace("\\", "/"))
     config = tmpConfig % {
         'NODE_NUMBER': n,
         'DIRECTORY': dirname,
@@ -248,6 +251,8 @@ def initialize_sc_datadir(dirname, n, bootstrap_info=SCBootstrapInfo, websocket_
         'CONNECTION_TIMEOUT': websocket_config.connectionTimeout,
         'RECONNECTION_DELAY': websocket_config.reconnectionDelay,
         'RECONNECTION_MAX_ATTEMPS': websocket_config.reconnectionMaxAttempts,
+        "ZEN_CLI": str(os.getenv("BITCOINCLI", "bitcoin-cli")).replace("\\","/"), # NOTE: it always will call first MC node RPC. TODO: make it configurable.
+        "ZEN_CLI_ARGS": json.dumps(zencliArgs),
         "THRESHOLD" : bootstrap_info.withdrawal_certificate_data.threshold,
         "SIGNER_PUBLIC_KEY": json.dumps(bootstrap_info.withdrawal_certificate_data.schnorr_public_keys),
         "SIGNER_PRIVATE_KEY": json.dumps(bootstrap_info.withdrawal_certificate_data.schnorr_secrets)
@@ -326,7 +331,7 @@ def get_websocket_configuration(index, array_of_MCConnectionInfo):
     return array_of_MCConnectionInfo[index] if index < len(array_of_MCConnectionInfo) else MCConnectionInfo()
 
 
-def start_sc_node(i, dirname, extra_args=None, rpchost=None, timewait=None, binary=None, print_output_to_file=False):
+def start_sc_node(i, dirname, extra_args=None, rpchost=None, timewait=None, binary=None):
     """
     Start a SC node and returns API connection to it
     """
@@ -337,27 +342,23 @@ def start_sc_node(i, dirname, extra_args=None, rpchost=None, timewait=None, bina
         lib_separator = ";"
 
     if binary is None:
-        binary = "../examples/simpleapp/target/sidechains-sdk-simpleapp-0.2.6.jar" + lib_separator + "../examples/simpleapp/target/lib/* com.horizen.examples.SimpleApp"    #        else if platform.system() == 'Linux':
+        binary = "../examples/simpleapp/target/sidechains-sdk-simpleapp-0.2.6.jar" + lib_separator + "../examples/simpleapp/target/lib/* com.horizen.examples.SimpleApp"
+    #        else if platform.system() == 'Linux':
     bashcmd = 'java -cp ' + binary + " " + (datadir + ('/node%s.conf' % i))
-    if print_output_to_file:
-        with open(datadir + "/log_out.txt", "wb") as out, open(datadir + "/log_err.txt", "wb") as err:
-            sidechainclient_processes[i] = subprocess.Popen(bashcmd.split(), stdout=out, stderr=err)
-    else:
-        sidechainclient_processes[i] = subprocess.Popen(bashcmd.split())
-
+    sidechainclient_processes[i] = subprocess.Popen(bashcmd.split())
     url = "http://rt:rt@%s:%d" % ('127.0.0.1' or rpchost, sc_rpc_port(i))
     proxy = SidechainAuthServiceProxy(url)
     proxy.url = url  # store URL on proxy for info
     return proxy
 
 
-def start_sc_nodes(num_nodes, dirname, extra_args=None, rpchost=None, binary=None, print_output_to_file=False):
+def start_sc_nodes(num_nodes, dirname, extra_args=None, rpchost=None, binary=None):
     """
     Start multiple SC clients, return connections to them
     """
     if extra_args is None: extra_args = [None for i in range(num_nodes)]
     if binary is None: binary = [None for i in range(num_nodes)]
-    nodes = [start_sc_node(i, dirname, extra_args[i], rpchost, binary=binary[i], print_output_to_file=print_output_to_file) for i in range(num_nodes)]
+    nodes = [start_sc_node(i, dirname, extra_args[i], rpchost, binary=binary[i]) for i in range(num_nodes)]
     wait_for_sc_node_initialization(nodes)
     return nodes
 
@@ -685,4 +686,5 @@ def generate_next_block(node, node_name):
 def generate_next_blocks(node, node_name, blocks_count):
     blocks_ids = []
     for i in range(blocks_count):
-        blocks_ids.append(generate_next_block(node, node_name))    return blocks_ids
+        blocks_ids.append(generate_next_block(node, node_name))
+    return blocks_ids

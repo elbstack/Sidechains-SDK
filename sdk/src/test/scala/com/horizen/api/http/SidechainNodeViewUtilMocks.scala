@@ -56,7 +56,7 @@ class SidechainNodeViewUtilMocks extends MockitoSugar with BoxFixture with Compa
     Seq(),
     Seq(),
     forgerBoxMetadata.blockSignSecret,
-    forgingBox,
+    forgerBoxMetadata.forgingStakeInfo,
     VrfGenerator.generateProof(456L),
     MerkleTreeFixture.generateRandomMerklePath(456L),
     sidechainTransactionsCompanion,
@@ -78,6 +78,8 @@ class SidechainNodeViewUtilMocks extends MockitoSugar with BoxFixture with Compa
     })
 
     Mockito.when(history.getBestBlock).thenAnswer(_ => genesisBlock)
+
+    Mockito.when(history.getBlockHeightById(ArgumentMatchers.any[String])).thenAnswer(_ =>Optional.of(100))
 
     Mockito.when(history.getBlockIdByHeight(ArgumentMatchers.any())).thenAnswer(_ =>
       if (sidechainApiMockConfiguration.getShould_history_getBlockIdByHeight_return_value()) Optional.of("the_block_id")

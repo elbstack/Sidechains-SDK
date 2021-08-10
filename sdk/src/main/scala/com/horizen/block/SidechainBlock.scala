@@ -194,8 +194,8 @@ class SidechainBlock(override val header: SidechainBlockHeader,
 
 
 object SidechainBlock extends ScorexEncoding {
-  val MAX_BLOCK_SIZE: Int = 2048 * 1024 //2048K
-  val MAX_MC_BLOCKS_NUMBER: Int = 3
+  val MAX_BLOCK_SIZE: Int = 5000000
+  val MAX_MC_BLOCKS_NUMBER: Int = 5
   val MAX_SIDECHAIN_TXS_NUMBER: Int = 1000
   val ModifierTypeId: ModifierTypeId = scorex.core.ModifierTypeId @@ 3.toByte
   val BLOCK_VERSION: Block.Version = 1: Byte

@@ -28,8 +28,8 @@ case class WithdrawalEpochCertificateSettings(submitterIsEnabled: Boolean,
                                               signersThreshold: Int,
                                               signersSecrets: Seq[String],
                                               maxPks: Long,
-                                              provingKeyFilePath: String,
-                                              verificationKeyFilePath: String,
+                                              certProvingKeyFilePath: String,
+                                              certVerificationKeyFilePath: String,
                                               certificateSigningIsEnabled: Boolean = true,
                                               certificateAutomaticFeeComputation: Boolean = true,
                                               certificateFee: String = "0.0001"
@@ -40,6 +40,9 @@ case class ForgerSettings(automaticForging: Boolean = false)
 case class WalletSettings(seed: String,
                           genesisSecrets: Seq[String])
 
+case class CeasedSidechainWithdrawalSettings(cswProvingKeyFilePath: String,
+                                             cswVerificationKeyFilePath: String)
+
 case class LogInfoSettings(logFileName: String = "debug.log", logFileLevel: String = "all", logConsoleLevel: String = "error")
 
 case class SidechainSettings(
@@ -49,5 +52,6 @@ case class SidechainSettings(
                               withdrawalEpochCertificateSettings: WithdrawalEpochCertificateSettings,
                               wallet: WalletSettings,
                               forger: ForgerSettings,
+                              csw: CeasedSidechainWithdrawalSettings,
                               logInfo: LogInfoSettings
                             )

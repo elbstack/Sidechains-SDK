@@ -11,8 +11,7 @@ import java.util.Arrays;
 import java.util.Objects;
 
 public abstract class AbstractNoncedBox<P extends Proposition, BD extends AbstractNoncedBoxData<P, B, BD>, B extends AbstractNoncedBox<P, BD, B>>
-        extends ScorexEncoding implements NoncedBox<P>
-{
+        extends ScorexEncoding implements Box<P> {
     protected final BD boxData;
     protected final long nonce;
 
@@ -41,6 +40,11 @@ public abstract class AbstractNoncedBox<P extends Proposition, BD extends Abstra
     public final long nonce() { return nonce; }
 
     @Override
+    public final byte[] customFieldsHash() {
+        return boxData.customFieldsHash();
+    }
+
+    @Override
     public final byte[] id() {
         if(id == null) {
             id = Blake2b256.hash(Bytes.concat(
@@ -48,7 +52,7 @@ public abstract class AbstractNoncedBox<P extends Proposition, BD extends Abstra
                     Longs.toByteArray(value()),
                     proposition().bytes(),
                     Longs.toByteArray(nonce()),
-                    boxData.customFieldsHash()));
+                    customFieldsHash()));
         }
         return id;
     }

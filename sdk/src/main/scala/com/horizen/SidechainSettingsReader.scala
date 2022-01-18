@@ -28,8 +28,8 @@ object SidechainSettingsReader
     val forgerSettings = config.as[ForgerSettings]("scorex.forger")
     val cswSettings = config.as[CeasedSidechainWithdrawalSettings]("scorex.csw")
     val logInfoSettings = config.as[LogInfoSettings]("scorex.logInfo")
-    SidechainSettings(scorexSettings, genesisSetting, webSocketConnectorConfiguration, backwardTransfer,
-      walletSetting, forgerSettings, cswSettings, logInfoSettings)
+    SidechainSettings(scorexSettings, genesisSettings, webSocketConnectorConfigurationSettings, certificateSettings,
+      walletSettings, forgerSettings, cswSettings, logInfoSettings)
   }
 
   def readConfigFromPath(userConfigPath: String, applicationConfigPath: Option[String]): Config = {

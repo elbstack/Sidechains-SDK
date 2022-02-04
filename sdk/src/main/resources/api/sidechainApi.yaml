@@ -25,7 +25,7 @@ paths:
       tags:
         - block
       summary: find block by id
-      description: return a single block
+      description: return a single block and its height
       operationId: getBlock
       requestBody:
         content:
@@ -53,6 +53,9 @@ paths:
                         type: string
                       block:
                         $ref: '#/components/schemas/SidechainBlock'
+                      height:
+                        type: integer
+                        format: int64
                   error:
                     $ref: '#/components/schemas/SidechainApiErrorResponse'
         default:

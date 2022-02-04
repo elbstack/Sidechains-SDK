@@ -2,7 +2,6 @@ package com.horizen.api.http
 
 import java.net.{InetAddress, InetSocketAddress}
 import java.util
-
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler, Route}
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
@@ -44,6 +43,7 @@ import com.horizen.csw.CswManager.ReceivableMessages.{GenerateCswProof, GetBoxNu
 import com.horizen.csw.CswManager.Responses.{Absent, CswInfo, CswProofInfo, NoProofData, ProofCreationFinished}
 import org.bouncycastle.pqc.math.linearalgebra.ByteUtils
 
+import java.io.File
 import scala.language.postfixOps
 
 @RunWith(classOf[JUnitRunner])
@@ -52,6 +52,15 @@ abstract class SidechainApiRouteTest extends WordSpec with Matchers with Scalate
   implicit def exceptionHandler: ExceptionHandler = SidechainApiErrorHandler.exceptionHandler
 
   implicit def rejectionHandler: RejectionHandler = SidechainApiRejectionHandler.rejectionHandler
+
+  // initialize log properties since this app uses log4j from sdk libraries
+  // - default name for the log file
+  val logFileName = System.getProperty("java.io.tmpdir") + File.separator + getClass + ".log"
+  System.setProperty("logFilename", logFileName)
+  // - default levels: all in the file and just errors on console
+  System.setProperty("logFileLevel", "all")
+  System.setProperty("logConsoleLevel", "error")
+
 
   val sidechainTransactionsCompanion: SidechainTransactionsCompanion = getDefaultTransactionsCompanion
 

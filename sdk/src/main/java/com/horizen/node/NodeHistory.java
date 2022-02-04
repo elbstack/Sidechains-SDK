@@ -25,8 +25,6 @@ public interface NodeHistory {
 
     int getCurrentHeight();
 
-    Optional<Integer> getBlockHeight(String blockId);
-
     Optional<BoxTransaction<Proposition, Box<Proposition>>> searchTransactionInsideSidechainBlock(String transactionId, String blockId);
 
     Optional<BoxTransaction<Proposition, Box<Proposition>>> searchTransactionInsideBlockchain(String transactionId);

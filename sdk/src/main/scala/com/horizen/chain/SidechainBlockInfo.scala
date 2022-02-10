@@ -3,6 +3,7 @@ package com.horizen.chain
 import com.fasterxml.jackson.annotation._
 import com.fasterxml.jackson.databind.annotation.JsonSerialize
 import com.horizen.block.SidechainBlock
+
 import com.horizen.serialization.{ModifierSemanticValiditySerializer, Views}
 import com.horizen.utils.{WithdrawalEpochInfo, WithdrawalEpochInfoSerializer}
 import com.horizen.vrf.{VrfOutput, VrfOutputSerializer}
@@ -12,7 +13,6 @@ import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
-
 import scala.collection.mutable.ArrayBuffer
 
 @JsonView(Array(classOf[Views.Default]))
@@ -33,8 +33,6 @@ case class SidechainBlockInfo(height: Int,
   override type M = SidechainBlockInfo
 
   override lazy val serializer: ScorexSerializer[SidechainBlockInfo] = SidechainBlockInfoSerializer
-
-  override def bytes: Array[Byte] = SidechainBlockInfoSerializer.toBytes(this)
 
   lazy val mainchainHeaderHashes: Seq[MainchainHeaderHash] = {mainchainHeaderBaseInfo.map(info => info.hash)}
 }

@@ -8,6 +8,7 @@ import com.horizen.api.http.JacksonSupport._
 import com.horizen.api.http.SidechainBlockErrorResponse._
 import com.horizen.api.http.SidechainBlockRestSchema._
 import com.horizen.block.SidechainBlock
+import com.horizen.chain.SidechainBlockInfo
 import com.horizen.consensus.{intToConsensusEpochNumber, intToConsensusSlotNumber}
 import com.horizen.forge.Forger.ReceivableMessages.{GetForgingInfo, StartForging, StopForging, TryForgeNextBlockForEpochAndSlot}
 import com.horizen.forge.ForgingInfo
@@ -26,11 +27,11 @@ case class SidechainBlockApiRoute(override val settings: RESTApiSettings, sidech
   extends SidechainApiRoute {
 
   override val route: Route = pathPrefix("block") {
-    findById ~ findLastIds ~ findIdByHeight ~ getBestBlockInfo ~ startForging ~ stopForging ~ generateBlockForEpochNumberAndSlot ~ getForgingInfo
+    findById ~ findLastIds ~ findIdByHeight ~ getBestBlockInfo ~ findBlockInfoById ~ startForging ~ stopForging ~ generateBlockForEpochNumberAndSlot ~ getForgingInfo
   }
 
   /**
-    * The sidechain block by its id.
+    * Returns the sidechain block by its id and its height.
     */
   def findById: Route = (post & path("findById")) {
     entity(as[ReqFindById]) { body =>
@@ -96,6 +97,27 @@ case class SidechainBlockApiRoute(override val settings: RESTApiSettings, sidech
     }
   }
 
+  /**
+   * Returns SidechainBlockInfo by its id and if the block is in the active chain or not.
+   */
+  def findBlockInfoById: Route = (post & path("findBlockInfoById")) {
+    entity(as[ReqFindBlockInfoById]) { body =>
+      withNodeView { sidechainNodeView =>
+        val sidechainHistory = sidechainNodeView.getNodeHistory
+        val optionSidechainBlock = sidechainHistory.getBlockInfoById(body.blockId)
+
+        if (optionSidechainBlock.isPresent) {
+          val sblock = optionSidechainBlock.get()
+          val isInActiveChain = sidechainHistory.isInActiveChain(body.blockId)
+
+          ApiResponseUtil.toResponse(RespFindBlockInfoById(sblock, isInActiveChain))
+        }
+        else
+          ApiResponseUtil.toResponse(ErrorInvalidBlockId(s"Invalid id: ${body.blockId}", JOptional.empty()))
+      }
+    }
+  }
+
   def startForging: Route = (post & path("startForging")) {
     val future = forgerRef ? StartForging
     val result = Await.result(future, timeout.duration).asInstanceOf[Try[Unit]]
@@ -155,7 +177,7 @@ object SidechainBlockRestSchema {
 
   @JsonView(Array(classOf[Views.Default]))
   private[api] case class ReqFindById(blockId: String) {
-    require(blockId.length == 64, s"Invalid id $blockId. Id length must be 64")
+    require(blockId.length == SidechainBlock.BlockIdLenght, s"Invalid id $blockId. Id length must be ${SidechainBlock.BlockIdLenght}")
   }
 
   @JsonView(Array(classOf[Views.Default]))
@@ -175,13 +197,18 @@ object SidechainBlockRestSchema {
   }
 
   @JsonView(Array(classOf[Views.Default]))
-  private[api] case class ReqGenerateByEpochAndSlot(epochNumber: Int, slotNumber: Int)
-
-  @JsonView(Array(classOf[Views.Default]))
   private[api] case class RespFindIdByHeight(blockId: String) extends SuccessResponse
 
   @JsonView(Array(classOf[Views.Default]))
   private[api] case class RespBest(block: SidechainBlock, height: Int) extends SuccessResponse
+
+  @JsonView(Array(classOf[Views.Default]))
+  private[api] case class ReqFindBlockInfoById(blockId: String) {
+    require(blockId.length == SidechainBlock.BlockIdLenght, s"Invalid id $blockId. Id length must be ${SidechainBlock.BlockIdLenght}")
+  }
+
+  @JsonView(Array(classOf[Views.Default]))
+  private[api] case class RespFindBlockInfoById(block: SidechainBlockInfo, isInActiveChain: Boolean) extends SuccessResponse
 
   @JsonView(Array(classOf[Views.Default]))
   private[api] object RespStartForging extends SuccessResponse
@@ -216,6 +243,9 @@ object SidechainBlockRestSchema {
   private[api] object RespGenerateSkipSlot extends SuccessResponse {
     val result = "No block is generated due no eligible forger box are present, skip slot"
   }
+
+  @JsonView(Array(classOf[Views.Default]))
+  private[api] case class ReqGenerateByEpochAndSlot(epochNumber: Int, slotNumber: Int)
 
 }
 

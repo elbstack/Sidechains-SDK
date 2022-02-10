@@ -1,7 +1,9 @@
 package com.horizen.chain
 
+import com.fasterxml.jackson.annotation._
+import com.fasterxml.jackson.databind.annotation.JsonSerialize
 import com.horizen.block.SidechainBlock
-import com.horizen.cryptolibprovider.{CumulativeHashFunctions, FieldElementUtils}
+import com.horizen.serialization.{ModifierSemanticValiditySerializer, Views}
 import com.horizen.utils.{WithdrawalEpochInfo, WithdrawalEpochInfoSerializer}
 import com.horizen.vrf.{VrfOutput, VrfOutputSerializer}
 import scorex.core.NodeViewModifier
@@ -12,13 +14,14 @@ import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.collection.mutable.ArrayBuffer
-import com.horizen.librustsidechains.FieldElement
 
+@JsonView(Array(classOf[Views.Default]))
+@JsonIgnoreProperties(Array("serializer", "mainchainHeaderHashes"))
 case class SidechainBlockInfo(height: Int,
                               score: Long,
                               parentId: ModifierId,
                               timestamp: Timestamp,
-                              semanticValidity: ModifierSemanticValidity,
+                              @JsonSerialize(using = classOf[ModifierSemanticValiditySerializer]) semanticValidity: ModifierSemanticValidity,
                               mainchainHeaderBaseInfo: Seq[MainchainHeaderBaseInfo],
                               mainchainReferenceDataHeaderHashes: Seq[MainchainHeaderHash],
                               withdrawalEpochInfo: WithdrawalEpochInfo,

@@ -130,11 +130,22 @@ class SidechainNodeViewHolder(sidechainSettings: SidechainSettings,
       }
   }
 
+
+
+  protected def processGetStorageVersions: Receive = {
+    case SidechainNodeViewHolder.ReceivableMessages.GetStorageVersions =>
+       sender() ! getStorageVersions
+
+  }
+
+  def getStorageVersions : Map[String, String] = Map(("history", "jdfhsjghf"), ("wallet", "")) // TODO this is just a stub
+
   override def receive: Receive = {
       applyFunctionOnNodeView orElse
       applyBiFunctionOnNodeView orElse
       getCurrentSidechainNodeViewInfo orElse
       processLocallyGeneratedSecret orElse
+      processGetStorageVersions orElse
       super.receive
   }
 
@@ -295,6 +306,7 @@ object SidechainNodeViewHolder /*extends ScorexLogging with ScorexEncoding*/ {
     case class ApplyFunctionOnNodeView[HIS, MS, VL, MP, A](f: java.util.function.Function[SidechainNodeView, A])
     case class ApplyBiFunctionOnNodeView[HIS, MS, VL, MP, T, A](f: java.util.function.BiFunction[SidechainNodeView, T, A], functionParameter: T)
     case class LocallyGeneratedSecret[S <: SidechainTypes#SCS](secret: S)
+    case class GetStorageVersions()
   }
 }
 

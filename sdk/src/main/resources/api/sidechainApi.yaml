@@ -1384,8 +1384,8 @@ paths:
                     properties:
                       sidechainId:
                         type: string
-                   error:
-                    $ref: '#/components/schemas/SidechainApiErrorResponse'
+                    error:
+                      $ref: '#/components/schemas/SidechainApiErrorResponse'
         default:
           description: any kind of http error
           content:

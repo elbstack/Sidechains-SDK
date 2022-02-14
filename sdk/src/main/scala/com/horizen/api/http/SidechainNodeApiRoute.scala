@@ -3,11 +3,12 @@ package com.horizen.api.http
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import com.fasterxml.jackson.annotation.JsonView
-import com.horizen.SidechainNodeViewHolder.ReceivableMessages.GetStorageVersions
+import com.horizen.SidechainNodeViewHolder.ReceivableMessages.{GetSidechainId, GetStorageVersions}
 import com.horizen.api.http.JacksonSupport._
 import com.horizen.api.http.SidechainNodeErrorResponse.ErrorInvalidHost
 import com.horizen.api.http.SidechainNodeRestSchema._
 import com.horizen.serialization.Views
+import com.horizen.utils.BytesUtils
 import scorex.core.network.NetworkController.ReceivableMessages.{ConnectTo, GetConnectedPeers}
 import scorex.core.network.peer.PeerInfo
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{Blacklisted, GetAllPeers, GetBlacklistedPeers, RemovePeer}
@@ -25,7 +26,7 @@ case class SidechainNodeApiRoute(peerManager: ActorRef,
                                 (implicit val context: ActorRefFactory, override val ec: ExecutionContext) extends SidechainApiRoute {
 
   override val route: Route = pathPrefix("node") {
-    connect ~ allPeers ~ connectedPeers ~ blacklistedPeers ~ disconnect ~ getNodeStorageVersions
+    connect ~ allPeers ~ connectedPeers ~ blacklistedPeers ~ disconnect ~ getNodeStorageVersions ~ getSidechainId
   }
 
   private val addressAndPortRegexp = "([\\w\\.]+):(\\d{1,5})".r
@@ -118,10 +119,22 @@ case class SidechainNodeApiRoute(peerManager: ActorRef,
     try {
       val result = askActor[Map[String,String]](sidechainNodeViewHolderRef, GetStorageVersions)
         .map(x => RespGetNodeStorageVersions(x))
-      val resultList = Await.result(result, settings.timeout)
-      ApiResponseUtil.toResponse(resultList)
+      val listOfVersions = Await.result(result, settings.timeout)
+      ApiResponseUtil.toResponse(listOfVersions)
     } catch {
       case e: Throwable => SidechainApiError(e)
+    }
+  }
+
+  def getSidechainId: Route = (post & path("sidechainId")) {
+    try {
+      val result = askActor[Array[Byte]](sidechainNodeViewHolderRef, GetSidechainId)
+        .map(x => BytesUtils.toHexString(BytesUtils.reverseBytes(x)))
+
+      val sidechainId = Await.result(result, settings.timeout)
+      ApiResponseUtil.toResponse(RespGetSidechainId(sidechainId))
+    } catch {
+      case e: Throwable =>  SidechainApiError(e)
     }
   }
 
@@ -152,6 +165,9 @@ object SidechainNodeRestSchema {
 
   @JsonView(Array(classOf[Views.Default]))
   private[api] case class RespGetNodeStorageVersions(listOfVersions: Map[String,String]) extends SuccessResponse
+
+  @JsonView(Array(classOf[Views.Default]))
+  private[api] case class RespGetSidechainId(sidechainId: String) extends SuccessResponse
 
 }
 

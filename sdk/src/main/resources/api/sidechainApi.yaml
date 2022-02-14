@@ -1364,6 +1364,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/SidechainApiError'
 
+  /node/sidechainId:
+    post:
+      tags:
+        - node
+      summary: Returns the sidechain id
+      description: Returns the sidechain id
+      operationId: getSidechainId
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    properties:
+                      sidechainId:
+                        type: string
+                   error:
+                    $ref: '#/components/schemas/SidechainApiErrorResponse'
+        default:
+          description: any kind of http error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SidechainApiError'
+
   # Mainchain references info
   /mainchain/bestBlockReferenceInfo:
     post:

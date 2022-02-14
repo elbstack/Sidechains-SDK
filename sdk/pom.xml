@@ -325,6 +325,7 @@
           <include>new_mc_blocks/mc_block_with_certificate_with_custom_fields</include>
           <include>backward_transfer_certificate_empty</include>
           <include>backward_transfer_certificate_non_empty</include>
+         <include>log4j2-test.xml</include>
         </includes>
       </testResource>
     </testResources>

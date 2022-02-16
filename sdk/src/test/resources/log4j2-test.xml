@@ -11,35 +11,11 @@
             <PatternLayout pattern="${LOG_PATTERN}"/>
         </Console>
 
-        <!--RollingFile name="errorLog" fileName="log/application2-error.log"
-                     filePattern="log/application-error-%d{yyyy-MM-dd}-%i.log" >
-            <LevelRangeFilter minLevel="ERROR" maxLevel="ERROR" onMatch="ACCEPT" onMismatch="DENY"/>
-            <PatternLayout pattern="${LOG_PATTERN}"/>
-            <Policies>
-                <SizeBasedTriggeringPolicy size="10000KB" />
-            </Policies>
-            <DefaultRolloverStrategy max="10"/>
-        </RollingFile-->
-
-   <!--     <RollingFile name="debugLog" fileName="${sys:logFilename}"
-                     filePattern="log/application-%d{yyyy-MM-dd}-%i.log" >
-            <ThresholdFilter level="all" onMatch="ACCEPT" onMismatch="DENY"/>
-            <PatternLayout pattern="${LOG_PATTERN}"/>
-            <Policies>
-                <SizeBasedTriggeringPolicy size="10000KB" />
-            </Policies>
-            <DefaultRolloverStrategy max="10"/>
-        </RollingFile>
--->
     </Appenders>
 
     <Loggers>
 
         <!-- Specify this if some class need special handling-->
-        <!---Logger name="io.horizen.simpleapp" additivity="false">
-            <AppenderRef ref="debugLog" />
-            <AppenderRef ref="Console"/>
-        </Logger-->
 
         <Root level="all">
             <AppenderRef ref="Console" level="ALL"/>

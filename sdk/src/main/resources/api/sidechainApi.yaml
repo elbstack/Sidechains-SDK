@@ -185,7 +185,7 @@ paths:
     post:
       tags:
         - block
-      summary: finds block by id
+      summary: finds SidechainBlockInfo by id
       description: returns SidechainBlockInfo for a single block and if it is in the active chain
       operationId: findBlockInfoById
       requestBody:
@@ -210,7 +210,7 @@ paths:
                   result:
                     type: object
                     properties:
-                      block:
+                      blockInfo:
                         $ref: '#/components/schemas/SidechainBlockInfo'
                       isInActiveChain:
                         type: boolean

@@ -31,7 +31,7 @@ case class SidechainBlockApiRoute(override val settings: RESTApiSettings, sidech
   }
 
   /**
-    * Returns the sidechain block by its id and its height.
+    * Returns the sidechain block and its height for given block id.
     */
   def findById: Route = (post & path("findById")) {
     entity(as[ReqFindById]) { body =>
@@ -58,8 +58,8 @@ case class SidechainBlockApiRoute(override val settings: RESTApiSettings, sidech
   def findLastIds: Route = (post & path("findLastIds")) {
     entity(as[ReqLastIds]) { body =>
       withNodeView { sidechainNodeView =>
-        var sidechainHistory = sidechainNodeView.getNodeHistory
-        var blockIds = sidechainHistory.getLastBlockIds(body.number)
+        val sidechainHistory = sidechainNodeView.getNodeHistory
+        val blockIds = sidechainHistory.getLastBlockIds(body.number)
         ApiResponseUtil.toResponse(RespLastIds(blockIds.asScala))
       }
     }
@@ -71,7 +71,7 @@ case class SidechainBlockApiRoute(override val settings: RESTApiSettings, sidech
   def findIdByHeight: Route = (post & path("findIdByHeight")) {
     entity(as[ReqFindIdByHeight]) { body =>
       withNodeView { sidechainNodeView =>
-        var sidechainHistory = sidechainNodeView.getNodeHistory
+        val sidechainHistory = sidechainNodeView.getNodeHistory
         val blockIdOptional = sidechainHistory.getBlockIdByHeight(body.height)
         if (blockIdOptional.isPresent) {
           ApiResponseUtil.toResponse(RespFindIdByHeight(blockIdOptional.get()))
@@ -93,7 +93,7 @@ case class SidechainBlockApiRoute(override val settings: RESTApiSettings, sidech
         if (height > 0)
           ApiResponseUtil.toResponse(RespBest(sidechainHistory.getBestBlock, height))
         else
-          ApiResponseUtil.toResponse(ErrorInvalidBlockHeight(s"Invalid height: ${height}", JOptional.empty()))
+          ApiResponseUtil.toResponse(ErrorInvalidBlockHeight(s"Invalid height: $height", JOptional.empty()))
     }
   }
 
@@ -177,7 +177,7 @@ object SidechainBlockRestSchema {
 
   @JsonView(Array(classOf[Views.Default]))
   private[api] case class ReqFindById(blockId: String) {
-    require(blockId.length == SidechainBlock.BlockIdLenght, s"Invalid id $blockId. Id length must be ${SidechainBlock.BlockIdLenght}")
+    require(blockId.length == SidechainBlock.BlockIdHexStringLength, s"Invalid id $blockId. Id length must be ${SidechainBlock.BlockIdHexStringLength}")
   }
 
   @JsonView(Array(classOf[Views.Default]))
@@ -204,11 +204,11 @@ object SidechainBlockRestSchema {
 
   @JsonView(Array(classOf[Views.Default]))
   private[api] case class ReqFindBlockInfoById(blockId: String) {
-    require(blockId.length == SidechainBlock.BlockIdLenght, s"Invalid id $blockId. Id length must be ${SidechainBlock.BlockIdLenght}")
+    require(blockId.length == SidechainBlock.BlockIdHexStringLength, s"Invalid id $blockId. Id length must be ${SidechainBlock.BlockIdHexStringLength}")
   }
 
   @JsonView(Array(classOf[Views.Default]))
-  private[api] case class RespFindBlockInfoById(block: SidechainBlockInfo, isInActiveChain: Boolean) extends SuccessResponse
+  private[api] case class RespFindBlockInfoById(blockInfo: SidechainBlockInfo, isInActiveChain: Boolean) extends SuccessResponse
 
   @JsonView(Array(classOf[Views.Default]))
   private[api] object RespStartForging extends SuccessResponse

@@ -18,8 +18,8 @@ public abstract class AbstractBox<P extends Proposition, BD extends AbstractBoxD
     private byte[] id;
     private Integer hashcode;
 
-    private final static byte[] coinsBoxFlag = { (byte)1 };
-    private final static byte[] nonCoinsBoxFlag = { (byte)0 };
+    private final static byte[] coinsSpendableBoxFlag = { (byte)1 };
+    private final static byte[] nonCoinsSpendableBoxFlag = { (byte)0 };
 
     public AbstractBox(BD boxData, long nonce) {
         Objects.requireNonNull(boxData, "boxData must be defined");
@@ -48,7 +48,7 @@ public abstract class AbstractBox<P extends Proposition, BD extends AbstractBoxD
     public final byte[] id() {
         if(id == null) {
             id = Blake2b256.hash(Bytes.concat(
-                    this instanceof CoinsBox ? coinsBoxFlag : nonCoinsBoxFlag,
+                    this instanceof CoinsSpendableBox ? coinsSpendableBoxFlag : nonCoinsSpendableBoxFlag,
                     Longs.toByteArray(value()),
                     proposition().bytes(),
                     Longs.toByteArray(nonce()),

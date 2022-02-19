@@ -3,7 +3,7 @@ package com.horizen
 import java.lang
 import java.util.{List => JList, Optional => JOptional}
 import com.horizen.block.{MainchainBlockReferenceData, SidechainBlock}
-import com.horizen.box.{Box, CoinsBox, ForgerBox}
+import com.horizen.box.{Box, CoinsSpendableBox, ForgerBox}
 import com.horizen.consensus.{ConsensusEpochInfo, ConsensusEpochNumber, ForgingStakeInfo}
 import com.horizen.wallet.ApplicationWallet
 import com.horizen.node.NodeWallet
@@ -166,7 +166,7 @@ class SidechainWallet private[horizen] (seed: Array[Byte],
   }
 
   private[horizen] def calculateUtxoCswData(view: UtxoMerkleTreeView): Seq[CswData] = {
-    boxes().filter(wb => wb.box.isInstanceOf[CoinsBox[_ <: PublicKey25519Proposition]]).map(wb => {
+    boxes().filter(wb => wb.box.isInstanceOf[CoinsSpendableBox[_ <: PublicKey25519Proposition]]).map(wb => {
       val box = wb.box
       UtxoCswData(box.id(), box.proposition().bytes, box.value(), box.nonce(),
         box.customFieldsHash(), view.utxoMerklePath(box.id()).get)
@@ -269,8 +269,8 @@ class SidechainWallet private[horizen] (seed: Array[Byte],
     secretStorage.getAll.filter(_.getClass.equals(secretType)).asJava
   }
 
-  override def allCoinsBoxesBalance(): lang.Long = {
-    walletBoxStorage.getAll.withFilter(_.box.isInstanceOf[CoinsBox[_ <: PublicKey25519Proposition]]).map(_.box.value()).sum
+  override def allCoinsSpendableBoxesBalance(): lang.Long = {
+    walletBoxStorage.getAll.withFilter(_.box.isInstanceOf[CoinsSpendableBox[_ <: PublicKey25519Proposition]]).map(_.box.value()).sum
   }
 
   override def walletSeed(): Array[Byte] = seed

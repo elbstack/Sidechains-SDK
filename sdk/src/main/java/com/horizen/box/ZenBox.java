@@ -12,7 +12,7 @@ import static com.horizen.box.CoreBoxesIdsEnum.ZenBoxId;
 
 public final class ZenBox
     extends AbstractBox<PublicKey25519Proposition, ZenBoxData, ZenBox>
-    implements CoinsBox<PublicKey25519Proposition>
+    implements CoinsSpendableBox<PublicKey25519Proposition>
 {
 
     public ZenBox(ZenBoxData boxData, long nonce) {

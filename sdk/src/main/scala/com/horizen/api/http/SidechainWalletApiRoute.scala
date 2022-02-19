@@ -57,7 +57,7 @@ case class SidechainWalletApiRoute(override val settings: RESTApiSettings,
   def coinsBalance: Route = (post & path("coinsBalance")) {
     withNodeView { sidechainNodeView =>
       val wallet = sidechainNodeView.getNodeWallet
-      val sumOfBalances: Long = wallet.allCoinsBoxesBalance()
+      val sumOfBalances: Long = wallet.allCoinsSpendableBoxesBalance()
       ApiResponseUtil.toResponse(RespBalance(sumOfBalances))
     }
   }

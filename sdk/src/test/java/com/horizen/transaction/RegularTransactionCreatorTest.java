@@ -39,7 +39,7 @@ class TransactionCreatorNodeWallet implements NodeWallet {
     }
 
     @Override
-    public Long allCoinsBoxesBalance() {
+    public Long allCoinsSpendableBoxesBalance() {
         long sum = 0;
         for(Box b: _boxesOrderedBytCreationTime){
             sum += b.value();

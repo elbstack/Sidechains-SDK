@@ -4,7 +4,7 @@ import com.google.common.primitives.Bytes;
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
 import com.horizen.box.Box;
-import com.horizen.box.CoinsBox;
+import com.horizen.box.CoinsSpendableBox;
 import com.horizen.box.BoxUnlocker;
 import com.horizen.box.WithdrawalRequestBox;
 import com.horizen.proposition.Proposition;
@@ -86,7 +86,7 @@ abstract public class SidechainTransaction<P extends Proposition, B extends Box<
                         "output box [%d] nonce is invalid", id(), i));
             }
             // check coins box value
-            if(box instanceof CoinsBox || box instanceof WithdrawalRequestBox) {
+            if(box instanceof CoinsSpendableBox || box instanceof WithdrawalRequestBox) {
                 if (box instanceof WithdrawalRequestBox
                         && box.value() < withdrawalThreshold) {
                     throw new TransactionSemanticValidityException(String.format("Transaction [%s] is semantically invalid: " +

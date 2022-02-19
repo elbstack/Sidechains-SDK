@@ -840,7 +840,7 @@ class SidechainWalletTest
       Some(boxIdToMerklePath(boxId))
     })
 
-    val expectedCswData = boxes.filter(_.isInstanceOf[CoinsBox[_]]).map(b => walletBoxToCswData(b, utxoMerkleTreeView))
+    val expectedCswData = boxes.filter(_.isInstanceOf[CoinsSpendableBox[_]]).map(b => walletBoxToCswData(b, utxoMerkleTreeView))
     val cswData = sidechainWallet.calculateUtxoCswData(utxoMerkleTreeView)
 
     assertEquals("Different CSW data found.", expectedCswData, cswData)

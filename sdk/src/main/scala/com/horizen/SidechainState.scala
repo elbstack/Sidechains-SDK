@@ -6,7 +6,7 @@ import java.io.File
 import java.util
 import java.util.{Optional => JOptional}
 import com.horizen.block.{SidechainBlock, WithdrawalEpochCertificate}
-import com.horizen.box.{Box, CoinsBox, ForgerBox, WithdrawalRequestBox, ZenBox}
+import com.horizen.box.{Box, CoinsSpendableBox, ForgerBox, WithdrawalRequestBox, ZenBox}
 import com.horizen.consensus._
 import com.horizen.node.NodeState
 import com.horizen.params.NetworkParams
@@ -248,8 +248,8 @@ class SidechainState private[horizen] (stateStorage: SidechainStateStorage,
   override def validate(tx: SidechainTypes#SCBT): Try[Unit] = Try {
     semanticValidity(tx).get
 
-    var closedCoinsBoxesAmount : Long = 0L
-    var newCoinsBoxesAmount : Long = 0L
+    var closedCoinsSpendableBoxesAmount : Long = 0L
+    var newCoinsSpendableBoxesAmount : Long = 0L
 
     if (!tx.isInstanceOf[MC2SCAggregatedTransaction]) {
 
@@ -259,20 +259,20 @@ class SidechainState private[horizen] (stateStorage: SidechainStateStorage,
             val boxKey = u.boxKey()
             if (!boxKey.isValid(box.proposition(), tx.messageToSign()))
               throw new Exception("Box unlocking proof is invalid.")
-            if (box.isInstanceOf[CoinsBox[_ <: PublicKey25519Proposition]])
-              closedCoinsBoxesAmount += box.value()
+            if (box.isInstanceOf[CoinsSpendableBox[_ <: PublicKey25519Proposition]])
+              closedCoinsSpendableBoxesAmount += box.value()
           }
           case None => throw new Exception(s"Box ${u.closedBoxId()} is not found in state")
         }
       }
 
-      newCoinsBoxesAmount = tx.newBoxes().asScala
-        .filter(box => box.isInstanceOf[CoinsBox[_ <: PublicKey25519Proposition]] || box.isInstanceOf[WithdrawalRequestBox])
+      newCoinsSpendableBoxesAmount = tx.newBoxes().asScala
+        .filter(box => box.isInstanceOf[CoinsSpendableBox[_ <: PublicKey25519Proposition]] || box.isInstanceOf[WithdrawalRequestBox])
         .map(_.value()).sum
 
-      if (closedCoinsBoxesAmount != newCoinsBoxesAmount + tx.fee())
-        throw new Exception("Amounts sum of CoinsBoxes is incorrect. " +
-          s"ClosedBox amount - $closedCoinsBoxesAmount, NewBoxesAmount - $newCoinsBoxesAmount, Fee - ${tx.fee()}")
+      if (closedCoinsSpendableBoxesAmount != newCoinsSpendableBoxesAmount + tx.fee())
+        throw new Exception("Amounts sum of CoinsSpendableBoxes is incorrect. " +
+          s"ClosedBox amount - $closedCoinsSpendableBoxesAmount, NewBoxesAmount - $newCoinsSpendableBoxesAmount, Fee - ${tx.fee()}")
 
     }
 
@@ -336,7 +336,7 @@ class SidechainState private[horizen] (stateStorage: SidechainStateStorage,
         otherBoxesToAppend.append(box)
     })
 
-    val coinBoxesToAppend = boxesToAppend.filter(box => box.isInstanceOf[CoinsBox[_ <: PublicKey25519Proposition]])
+    val coinBoxesToAppend = boxesToAppend.filter(box => box.isInstanceOf[CoinsSpendableBox[_ <: PublicKey25519Proposition]])
 
     applicationState.onApplyChanges(this,
       version.data,

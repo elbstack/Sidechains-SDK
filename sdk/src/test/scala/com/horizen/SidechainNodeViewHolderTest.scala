@@ -66,7 +66,7 @@ class SidechainNodeViewHolderTest extends JUnitSuite
     Mockito.when(state.getWithdrawalEpochInfo).thenReturn(WithdrawalEpochInfo(0, 1))
     Mockito.when(state.isWithdrawalEpochLastIndex).thenReturn(false)
     // Mock wallet to apply incoming block successfully
-    Mockito.when(wallet.scanPersistent(ArgumentMatchers.any[SidechainBlock], ArgumentMatchers.any[Int](), ArgumentMatchers.any(), ArgumentMatchers.any())).thenReturn(wallet)
+    Mockito.when(wallet.scanPersistent(ArgumentMatchers.any[SidechainBlock], ArgumentMatchers.any[Int](), ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any())).thenReturn(wallet)
 
 
     var stateNotificationExecuted: Boolean = false
@@ -138,6 +138,7 @@ class SidechainNodeViewHolderTest extends JUnitSuite
     // Wallet apply
     Mockito.when(wallet.scanPersistent(ArgumentMatchers.any[SidechainBlock],
       ArgumentMatchers.any[Int](),
+      ArgumentMatchers.any(),
       ArgumentMatchers.any(),
       ArgumentMatchers.any())).thenAnswer( answer => {
       val blockToApply: SidechainBlock = answer.getArgument(0).asInstanceOf[SidechainBlock]
@@ -233,6 +234,7 @@ class SidechainNodeViewHolderTest extends JUnitSuite
     Mockito.when(wallet.scanPersistent(ArgumentMatchers.any[SidechainBlock],
       ArgumentMatchers.any[Int](),
       ArgumentMatchers.any(),
+      ArgumentMatchers.any(),
       ArgumentMatchers.any()))
       .thenAnswer( answer => {
         val blockToApply: SidechainBlock = answer.getArgument(0).asInstanceOf[SidechainBlock]
@@ -298,6 +300,7 @@ class SidechainNodeViewHolderTest extends JUnitSuite
     Mockito.when(wallet.scanPersistent(ArgumentMatchers.any[SidechainBlock],
       ArgumentMatchers.any[Int](),
       ArgumentMatchers.any(),
+      ArgumentMatchers.any(),
       ArgumentMatchers.any())).thenAnswer( _ => {
       fail("Wallet should NOT receive block to apply.")
       wallet
@@ -352,6 +355,7 @@ class SidechainNodeViewHolderTest extends JUnitSuite
     Mockito.when(wallet.scanPersistent(
       ArgumentMatchers.any[SidechainBlock],
       ArgumentMatchers.any[Int](),
+      ArgumentMatchers.any[Seq[SidechainTypes#SCB]](),
       ArgumentMatchers.any[Seq[SidechainTypes#SCB]](),
       ArgumentMatchers.any[Option[UtxoMerkleTreeView]]()))
       .thenAnswer(args => {
@@ -416,6 +420,7 @@ class SidechainNodeViewHolderTest extends JUnitSuite
     Mockito.when(wallet.scanPersistent(
       ArgumentMatchers.any[SidechainBlock],
       ArgumentMatchers.any[Int](),
+      ArgumentMatchers.any[Seq[SidechainTypes#SCB]](),
       ArgumentMatchers.any[Seq[SidechainTypes#SCB]](),
       ArgumentMatchers.any[Option[UtxoMerkleTreeView]]()))
       .thenAnswer(args => {

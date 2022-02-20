@@ -127,6 +127,12 @@ class SidechainStateStorage(storage: Storage, sidechainBoxesCompanion: Sidechain
     blockFees
   }
 
+  def getCoinPoolWithdrawalRequests(withdrawalEpoch: Int): Seq[WithdrawalRequestBox] = {
+    val withdrawalRequests: ListBuffer[WithdrawalRequestBox] = ListBuffer()
+    val lastCounter: Int = getWithdrawalEpochCounter(withdrawalEpoch)
+    withdrawalRequests
+  }
+
   def getWithdrawalRequests(withdrawalEpoch: Int): Seq[WithdrawalRequestBox] = {
     // Aggregate withdrawal requests until reaching the counter, where the key is not present in the storage.
     val withdrawalRequests: ListBuffer[WithdrawalRequestBox] = ListBuffer()

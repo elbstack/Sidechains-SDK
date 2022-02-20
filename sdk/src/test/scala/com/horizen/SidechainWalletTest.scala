@@ -259,22 +259,23 @@ class SidechainWalletTest
     Mockito.when(mockedWalletBoxStorage.getAll)
         .thenReturn(boxList.toList)
 
-    // Prepare what we expect to receive for ApplicationWallet.onChangeBoxes
-    Mockito.when(mockedApplicationWallet.onChangeBoxes(
-      ArgumentMatchers.any[Array[Byte]](),
+    // Prepare what we expect to receive for ApplicationWallet.applyChanges
+    Mockito.when(mockedApplicationWallet.applyChanges(
+      ArgumentMatchers.any[SidechainBlock](),
       ArgumentMatchers.anyList[SidechainTypes#SCB](),
-      ArgumentMatchers.anyList[Array[Byte]]()))
+      ArgumentMatchers.anyList[Array[Byte]](),
+      ArgumentMatchers.anyList[SidechainTypes#SCB]()))
       .thenAnswer(answer => {
         val version = answer.getArgument(0).asInstanceOf[Array[Byte]]
         val boxesToUpdate = answer.getArgument(1).asInstanceOf[JList[SidechainTypes#SCB]]
         val boxIdsToRemove = answer.getArgument(2).asInstanceOf[JList[Array[Byte]]].asScala.map(new ByteArrayWrapper(_)).toList.asJava
 
         // check
-        assertEquals("ScanPersistent on ApplicationWallet.onChangeBoxes(...) actual version is wrong.",
+        assertEquals("ScanPersistent on ApplicationWallet.applyChanges(...) actual version is wrong.",
           new ByteArrayWrapper(blockId),
           new ByteArrayWrapper(version))
 
-        assertEquals("ScanPersistent on ApplicationWallet.onChangeBoxes(...) actual boxesToUpdate list is wrong.", util.Arrays.asList(
+        assertEquals("ScanPersistent on ApplicationWallet.applyChanges(...) actual boxesToUpdate list is wrong.", util.Arrays.asList(
           transaction1.newBoxes().get(0),
           transaction2.newBoxes().get(0),
           transaction2.newBoxes().get(1),
@@ -283,7 +284,7 @@ class SidechainWalletTest
           feePaymentBoxes(2)
         ), boxesToUpdate)
 
-        assertEquals("ScanPersistent on ApplicationWallet.onChangeBoxes(...) actual boxIdsToRemove list is wrong.",
+        assertEquals("ScanPersistent on ApplicationWallet.applyChanges(...) actual boxIdsToRemove list is wrong.",
           List(transaction1, transaction2).flatMap(_.unlockers().asScala.map(u => new ByteArrayWrapper(u.closedBoxId))).asJava,
           boxIdsToRemove)
 
@@ -343,7 +344,7 @@ class SidechainWalletTest
         Success(mockedCswDataStorage)
       })
 
-    sidechainWallet.scanPersistent(mockedBlock, withdrawalEpochNumber, feePaymentBoxes, None)
+    sidechainWallet.scanPersistent(mockedBlock, withdrawalEpochNumber, feePaymentBoxes, feePaymentBoxes, None)
 
 
     // Test: Last WE block
@@ -373,7 +374,7 @@ class SidechainWalletTest
         Success(mockedCswDataStorage)
       })
 
-    sidechainWallet.scanPersistent(mockedBlock, withdrawalEpochNumber, feePaymentBoxes, Some(utxoMerkleTreeView))
+    sidechainWallet.scanPersistent(mockedBlock, withdrawalEpochNumber, Seq(), Seq(), Some(utxoMerkleTreeView))
   }
 
   @Test
@@ -518,7 +519,7 @@ class SidechainWalletTest
       params,
       new CustomApplicationWallet())
 
-    sidechainWallet.scanPersistent(mockedBlock, withdrawalEpochNumber, Seq(), None)
+    sidechainWallet.scanPersistent(mockedBlock, withdrawalEpochNumber, Seq(), Seq(), None)
 
     val wbl = sidechainWallet.boxes()
 

@@ -4,6 +4,7 @@ import com.horizen.box.Box;
 import com.horizen.proposition.Proposition;
 import com.horizen.secret.Secret;
 import com.horizen.wallet.ApplicationWallet;
+import com.horizen.block.SidechainBlock;
 
 import java.util.List;
 
@@ -19,7 +20,7 @@ public class CustomApplicationWallet implements ApplicationWallet {
     }
 
     @Override
-    public void onChangeBoxes(byte[] blockId, List<Box<Proposition>> boxesToUpdate, List<byte[]> boxIdsToRemove) {
+    public void applyChanges(SidechainBlock block, List<Box<Proposition>> boxesToUpdate, List<byte[]> boxIdsToRemove, List<Box<Proposition>> coinsPoolWithdrawals) {
 
     }
 

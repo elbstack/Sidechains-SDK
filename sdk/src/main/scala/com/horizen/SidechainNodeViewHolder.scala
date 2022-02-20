@@ -273,9 +273,9 @@ class SidechainNodeViewHolder(sidechainSettings: SidechainSettings,
 
             val stateWithdrawalEpochNumber: Int = stateAfterApply.getWithdrawalEpochInfo.epoch
             val walletAfterApply: SidechainWallet = if(stateAfterApply.isWithdrawalEpochLastIndex) {
-              newWallet.scanPersistent(modToApply, stateWithdrawalEpochNumber, stateAfterApply.getFeePayments(stateWithdrawalEpochNumber), Some(stateAfterApply))
+              newWallet.scanPersistent(modToApply, stateWithdrawalEpochNumber, stateAfterApply.getFeePayments(stateWithdrawalEpochNumber), stateAfterApply.getCoinPoolWithdrawalRequests(stateWithdrawalEpochNumber), Some(stateAfterApply))
             } else {
-              newWallet.scanPersistent(modToApply, stateWithdrawalEpochNumber, Seq(), None)
+              newWallet.scanPersistent(modToApply, stateWithdrawalEpochNumber, Seq(), Seq(), None)
             }
 
             SidechainNodeUpdateInformation(historyAfterApply, stateAfterApply, walletAfterApply, None, None, updateInfo.suffix :+ modToApply)

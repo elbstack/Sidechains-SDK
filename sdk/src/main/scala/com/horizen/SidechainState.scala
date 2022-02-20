@@ -434,6 +434,10 @@ class SidechainState private[horizen] (stateStorage: SidechainStateStorage,
     getFeePayments(withdrawalEpochNumber, None)
   }
 
+  def getCoinPoolWithdrawalRequests(withdrawalEpochNumber: Int): Seq[SidechainTypes#SCB] = {
+    getCoinPoolWithdrawalRequests(withdrawalEpochNumber)
+  }
+
   // Collect Fee payments during the appending of the last withdrawal epoch block, considering that block fee info as well.
   private def getFeePayments(withdrawalEpochNumber: Int, blockToAppendInfo: Option[(ModifierId, BlockFeeInfo)]): Seq[SidechainTypes#SCB] = {
     var blockFeeInfoSeq: Seq[BlockFeeInfo] = stateStorage.getFeePayments(withdrawalEpochNumber)

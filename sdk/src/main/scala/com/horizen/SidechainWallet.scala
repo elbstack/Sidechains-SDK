@@ -114,6 +114,7 @@ class SidechainWallet private[horizen] (seed: Array[Byte],
   def scanPersistent(modifier: SidechainBlock,
                      withdrawalEpoch: Int,
                      feePaymentBoxes: Seq[SidechainTypes#SCB],
+                     coinsPoolWithdrawals: Seq[SidechainTypes#SCB],
                      utxoMerkleTreeViewOpt: Option[UtxoMerkleTreeView]): SidechainWallet = {
     //require(modifier != null, "SidechainBlock must be NOT NULL.")
     val version = BytesUtils.fromHexString(modifier.id)
@@ -160,7 +161,7 @@ class SidechainWallet private[horizen] (seed: Array[Byte],
 
     cswDataStorage.update(new ByteArrayWrapper(version), withdrawalEpoch, ftCswData ++ utxoCswData)
 
-    applicationWallet.onChangeBoxes(version, newBoxes.toList.asJava, boxIdsToRemove.toList.asJava)
+    applicationWallet.applyChanges(modifier, newBoxes.toList.asJava, boxIdsToRemove.toList.asJava, coinsPoolWithdrawals.toList.asJava)
 
     this
   }
@@ -345,7 +346,7 @@ object SidechainWallet
     if (walletBoxStorage.isEmpty) {
       val genesisWallet = new SidechainWallet(seed, walletBoxStorage, secretStorage, walletTransactionStorage,
         forgingBoxesInfoStorage, cswDataStorage, params, applicationWallet)
-      genesisWallet.scanPersistent(genesisBlock, withdrawalEpochNumber, Seq(), None).applyConsensusEpochInfo(consensusEpochInfo)
+      genesisWallet.scanPersistent(genesisBlock, withdrawalEpochNumber, Seq(), Seq(), None).applyConsensusEpochInfo(consensusEpochInfo)
     }
     else
       throw new RuntimeException("WalletBox storage is not empty!")

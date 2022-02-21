@@ -248,8 +248,8 @@ class SidechainState private[horizen] (stateStorage: SidechainStateStorage,
   override def validate(tx: SidechainTypes#SCBT): Try[Unit] = Try {
     semanticValidity(tx).get
 
-    var closedCoinsSpendableBoxesAmount : Long = 0L
-    var newCoinsSpendableBoxesAmount : Long = 0L
+    var closedCoinsBoxesAmount : Long = 0L
+    var newCoinsBoxesAmount : Long = 0L
 
     if (!tx.isInstanceOf[MC2SCAggregatedTransaction]) {
 
@@ -259,20 +259,20 @@ class SidechainState private[horizen] (stateStorage: SidechainStateStorage,
             val boxKey = u.boxKey()
             if (!boxKey.isValid(box.proposition(), tx.messageToSign()))
               throw new Exception("Box unlocking proof is invalid.")
-            if (box.isInstanceOf[CoinsSpendableBox[_ <: PublicKey25519Proposition]])
-              closedCoinsSpendableBoxesAmount += box.value()
+            if (box.isInstanceOf[CoinsBox[_ <: PublicKey25519Proposition]])
+              closedCoinsBoxesAmount += box.value()
           }
           case None => throw new Exception(s"Box ${u.closedBoxId()} is not found in state")
         }
       }
 
-      newCoinsSpendableBoxesAmount = tx.newBoxes().asScala
-        .filter(box => box.isInstanceOf[CoinsSpendableBox[_ <: PublicKey25519Proposition]] || box.isInstanceOf[WithdrawalRequestBox])
+      newCoinsBoxesAmount = tx.newBoxes().asScala
+        .filter(box => box.isInstanceOf[CoinsBox[_ <: PublicKey25519Proposition]] || box.isInstanceOf[WithdrawalRequestBox])
         .map(_.value()).sum
 
-      if (closedCoinsSpendableBoxesAmount != newCoinsSpendableBoxesAmount + tx.fee())
-        throw new Exception("Amounts sum of CoinsSpendableBoxes is incorrect. " +
-          s"ClosedBox amount - $closedCoinsSpendableBoxesAmount, NewBoxesAmount - $newCoinsSpendableBoxesAmount, Fee - ${tx.fee()}")
+      if (closedCoinsBoxesAmount != newCoinsBoxesAmount + tx.fee())
+        throw new Exception("Amounts sum of CoinsBoxes is incorrect. " +
+          s"ClosedBox amount - $closedCoinsBoxesAmount, NewBoxesAmount - $newCoinsBoxesAmount, Fee - ${tx.fee()}")
 
     }
 

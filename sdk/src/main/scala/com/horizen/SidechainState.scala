@@ -6,7 +6,7 @@ import java.io.File
 import java.util
 import java.util.{Optional => JOptional}
 import com.horizen.block.{SidechainBlock, WithdrawalEpochCertificate}
-import com.horizen.box.{Box, CoinsSpendableBox, ForgerBox, WithdrawalRequestBox, ZenBox}
+import com.horizen.box.{Box, CoinsBox, CoinsSpendableBox, ForgerBox, WithdrawalRequestBox, ZenBox}
 import com.horizen.consensus._
 import com.horizen.node.NodeState
 import com.horizen.params.NetworkParams
@@ -336,7 +336,7 @@ class SidechainState private[horizen] (stateStorage: SidechainStateStorage,
         otherBoxesToAppend.append(box)
     })
 
-    val coinBoxesToAppend = boxesToAppend.filter(box => box.isInstanceOf[CoinsSpendableBox[_ <: PublicKey25519Proposition]])
+    val coinSpendableBoxesToAppend = boxesToAppend.filter(box => box.isInstanceOf[CoinsSpendableBox[_ <: PublicKey25519Proposition]])
 
     applicationState.onApplyChanges(this,
       version.data,
@@ -344,7 +344,7 @@ class SidechainState private[horizen] (stateStorage: SidechainStateStorage,
       changes.toRemove.map(_.boxId.array).asJava) match {
       case Success(appState) =>
         val boxIdsToRemoveSet = changes.toRemove.map(r => new ByteArrayWrapper(r.boxId)).toSet
-        val updatedUtxoMerkleTreeStorage = utxoMerkleTreeStorage.update(version, coinBoxesToAppend, boxIdsToRemoveSet).get
+        val updatedUtxoMerkleTreeStorage = utxoMerkleTreeStorage.update(version, coinSpendableBoxesToAppend, boxIdsToRemoveSet).get
         val utxoMerkleTreeRootOpt: Option[Array[Byte]] = if(isWithdrawalEpochFinished) {
           Some(updatedUtxoMerkleTreeStorage.getMerkleTreeRoot)
         } else {

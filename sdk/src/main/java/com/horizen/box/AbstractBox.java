@@ -36,6 +36,8 @@ public abstract class AbstractBox<P extends Proposition, BD extends AbstractBoxD
     @Override
     public final P proposition() { return boxData.proposition(); }
 
+    public final BD boxData() { return boxData; }
+
     @Override
     public final long nonce() { return nonce; }
 

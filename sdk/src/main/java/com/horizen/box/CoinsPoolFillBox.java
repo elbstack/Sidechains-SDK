@@ -1,6 +1,8 @@
 package com.horizen.box;
 
-public interface CoinsPoolFillBox extends CoinsBox
+import com.horizen.proposition.NullProposition;
+
+public interface CoinsPoolFillBox extends CoinsBox<NullProposition>
 {
 
 }
